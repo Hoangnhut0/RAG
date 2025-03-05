@@ -52,6 +52,22 @@ def preprocess_image(image):
     gray = cv2.fastNlMeansDenoising(gray, h=10)
     return Image.fromarray(gray)
 
+#  Sửa lỗi chính tả bằng Gemini AI
+def correct_spelling_with_gemini(text):
+    model = genai.GenerativeModel("gemini-2.0-flash")
+    prompt = f"""
+    Văn bản sau có thể chứa lỗi chính tả tiếng Việt và tiếng Anh do trích xuất từ OCR.
+    Hãy sửa lỗi chính tả và trả về văn bản đã được chỉnh sửa:
+    "{text}"
+    """
+    try:
+        response = model.generate_content(prompt)
+        corrected_text = response.text.strip() if response else text
+        return corrected_text
+    except Exception as e:
+        print(f"❌ Lỗi khi sửa chính tả với Gemini: {e}")
+        return text  
+
 # 📄 Trích xuất văn bản từ PDF thường và PDF scan
 def extract_text_from_pdf(pdf_path):
     try:
@@ -65,7 +81,7 @@ def extract_text_from_pdf(pdf_path):
         
         if text_content:
             extracted_text = "\n".join(text_content)
-            print(f"📜 Nội dung trích xuất từ '{pdf_path}':\n{extracted_text}\n{'='*50}")  # In nội dung ra console
+            print(f"📜 Nội dung trích xuất từ '{pdf_path}':\n{extracted_text}\n{'='*50}")
             return extracted_text
         
         # Nếu không có văn bản -> Xử lý bằng OCR
@@ -74,7 +90,7 @@ def extract_text_from_pdf(pdf_path):
         st.error(f"❌ Lỗi khi đọc PDF: {e}")
         return "Không có nội dung."
 
-# 📷 Sử dụng OCR với tiền xử lý nâng cao
+#  Sử dụng OCR với tiền xử lý nâng cao và sửa lỗi chính tả
 def extract_text_with_ocr(pdf_path):
     try:
         images = convert_from_path(pdf_path)
@@ -85,12 +101,16 @@ def extract_text_with_ocr(pdf_path):
             processed_img = preprocess_image(img)
             # OCR với cấu hình tùy chỉnh
             custom_config = r'--oem 3 --psm 6 -l eng+vie'
-            text = pytesseract.image_to_string(processed_img, config=custom_config).strip()
-            if text:
-                text_content.append(f"{text} [Trang {i+1}]")
+            raw_text = pytesseract.image_to_string(processed_img, config=custom_config).strip()
+            if raw_text:
+                # Sửa lỗi chính tả
+                corrected_text = correct_spelling_with_gemini(raw_text)
+                text_content.append(f"{corrected_text} [Trang {i+1}]")
+                # In văn bản thô và văn bản đã sửa ra terminal để kiểm tra
+                print(f"📜 Văn bản OCR thô (Trang {i+1}) từ '{pdf_path}':\n{raw_text}\n{'-'*50}")
+                print(f"📜 Văn bản sau khi sửa lỗi chính tả (Trang {i+1}):\n{corrected_text}\n{'='*50}")
         
         extracted_text = "\n".join(text_content) if text_content else "Không có nội dung."
-        print(f"📜 Nội dung OCR từ '{pdf_path}':\n{extracted_text}\n{'='*50}")  # In nội dung OCR ra console
         return extracted_text
     except Exception as e:
         st.error(f"❌ Lỗi khi xử lý OCR: {e}")
@@ -104,6 +124,7 @@ def generate_embedding(text):
 def store_document_in_qdrant(doc_id, text, metadata):
     vector = generate_embedding(text)
     metadata["text_content"] = text
+    print(f"📦 Văn bản cuối cùng lưu vào Qdrant:\n{text}\n{'='*50}")  # In văn bản trước khi lưu
     qdrant.upsert(
         collection_name=collection_name,
         points=[PointStruct(id=doc_id, vector=vector, payload=metadata)]
