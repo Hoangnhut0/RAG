@@ -1,0 +1,12 @@
+streamlit
+pymupdf
+pytesseract
+pdf2image
+qdrant-client
+sentence-transformers
+google-generativeai
+opencv-python
+pillow
+fuzzywuzzy
+nltk
+numpy
