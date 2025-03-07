@@ -77,11 +77,11 @@ def extract_text_from_pdf(pdf_path):
         for page_num, page in enumerate(doc, start=1):
             text = page.get_text("text").strip()
             if text:
-                text_content.append(f"{text} [Trang {page_num}]")
+                text_content.append(f"{text}\n[Trang {page_num}]")
         
         if text_content:
             extracted_text = "\n".join(text_content)
-            print(f"📜 Nội dung trích xuất từ '{pdf_path}':\n{extracted_text}\n{'='*50}")
+            #print(f"📜 Nội dung trích xuất từ '{pdf_path}':\n{extracted_text}\n{'='*50}")
             return extracted_text
         
         # Nếu không có văn bản -> Xử lý bằng OCR
@@ -105,9 +105,9 @@ def extract_text_with_ocr(pdf_path):
             if raw_text:
                 # Sửa lỗi chính tả
                 corrected_text = correct_spelling_with_gemini(raw_text)
-                text_content.append(f"{corrected_text} [Trang {i+1}]")
+                text_content.append(f"{corrected_text}\n[Trang {i+1}]")
                 # In văn bản thô và văn bản đã sửa ra terminal để kiểm tra
-                print(f"📜 Văn bản OCR thô (Trang {i+1}) từ '{pdf_path}':\n{raw_text}\n{'-'*50}")
+                #print(f"📜 Văn bản OCR thô (Trang {i+1}) từ '{pdf_path}':\n{raw_text}\n{'-'*50}")
                 print(f"📜 Văn bản sau khi sửa lỗi chính tả (Trang {i+1}):\n{corrected_text}\n{'='*50}")
         
         extracted_text = "\n".join(text_content) if text_content else "Không có nội dung."
@@ -147,7 +147,7 @@ def search_documents(query):
             filtered_results.append(r)
     return filtered_results
 
-# 📌 Trích xuất đoạn văn bản với nltk
+# 📌 Trích xuất đoạn văn bản với nltk và tìm số trang chính xác hơn
 def extract_relevant_text(full_text, query, filename, context_size=300):
     query_lower = query.lower()
     sentences = nltk.sent_tokenize(full_text)  # Tách câu với nltk
@@ -162,12 +162,15 @@ def extract_relevant_text(full_text, query, filename, context_size=300):
             end = min(len(full_text), start_idx + len(sent) + context_size // 2)
             relevant_text = full_text[start:end]
             
-            # Tìm số trang
+            # Tìm số trang gần nhất trước hoặc sau đoạn văn bản
             page_number = "Không rõ trang"
-            for line in full_text.split("\n"):
-                if "[Trang " in line and query_lower in line.lower():
-                    page_number = line.split("[Trang ")[-1].replace("]", "").strip()
-                    break
+            text_before = full_text[:end]  # Lấy toàn bộ văn bản từ đầu đến cuối đoạn trích xuất
+            pages = [line for line in text_before.split("\n") if "[Trang " in line]
+            if pages:
+                # Lấy số trang từ dòng cuối cùng có chứa "[Trang ...]"
+                last_page_line = pages[-1]
+                page_number = last_page_line.split("[Trang ")[-1].replace("]", "").strip()
+            
             return f"{relevant_text}...", page_number
     return None, "Không rõ trang"
 
@@ -221,4 +224,4 @@ def main():
                     st.markdown(f"🤖 **Trả lời:**\n\n{refined_answer}")
 
 if __name__ == "__main__":
-    main()
+    main()  
