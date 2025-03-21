@@ -9,7 +9,7 @@ import uuid
 from sentence_transformers import SentenceTransformer
 import google.generativeai as genai
 import cv2  # OpenCV để xử lý ảnh
-from PIL import Image  # Pillow để xử lý ảnh
+from PIL import Image  # để xử lý ảnh
 from fuzzywuzzy import fuzz  # So sánh chuỗi gần đúng
 import nltk  # Thay thế spaCy để xử lý ngôn ngữ tự nhiên
 import numpy as np
@@ -42,7 +42,7 @@ def ensure_collection_exists():
 
 ensure_collection_exists()
 
-# 📄 Tiền xử lý hình ảnh trước OCR
+# xử lý hình ảnh trước OCR
 def preprocess_image(image):
     # Chuyển sang grayscale
     gray = cv2.cvtColor(np.array(image), cv2.COLOR_BGR2GRAY)
@@ -52,7 +52,7 @@ def preprocess_image(image):
     gray = cv2.fastNlMeansDenoising(gray, h=10)
     return Image.fromarray(gray)
 
-#  Sửa lỗi chính tả bằng Gemini AI
+# Sửa lỗi chính tả bằng Gemini AI
 def correct_spelling_with_gemini(text):
     model = genai.GenerativeModel("gemini-2.0-flash")
     prompt = f"""
@@ -81,7 +81,6 @@ def extract_text_from_pdf(pdf_path):
         
         if text_content:
             extracted_text = "\n".join(text_content)
-            #print(f"📜 Nội dung trích xuất từ '{pdf_path}':\n{extracted_text}\n{'='*50}")
             return extracted_text
         
         # Nếu không có văn bản -> Xử lý bằng OCR
@@ -90,7 +89,7 @@ def extract_text_from_pdf(pdf_path):
         st.error(f"❌ Lỗi khi đọc PDF: {e}")
         return "Không có nội dung."
 
-#  Sử dụng OCR với tiền xử lý nâng cao và sửa lỗi chính tả
+# Sử dụng OCR với tiền xử lý nâng cao và sửa lỗi chính tả
 def extract_text_with_ocr(pdf_path):
     try:
         images = convert_from_path(pdf_path)
@@ -106,8 +105,6 @@ def extract_text_with_ocr(pdf_path):
                 # Sửa lỗi chính tả
                 corrected_text = correct_spelling_with_gemini(raw_text)
                 text_content.append(f"{corrected_text}\n[Trang {i+1}]")
-                # In văn bản thô và văn bản đã sửa ra terminal để kiểm tra
-                #print(f"📜 Văn bản OCR thô (Trang {i+1}) từ '{pdf_path}':\n{raw_text}\n{'-'*50}")
                 print(f"📜 Văn bản sau khi sửa lỗi chính tả (Trang {i+1}):\n{corrected_text}\n{'='*50}")
         
         extracted_text = "\n".join(text_content) if text_content else "Không có nội dung."
@@ -124,7 +121,7 @@ def generate_embedding(text):
 def store_document_in_qdrant(doc_id, text, metadata):
     vector = generate_embedding(text)
     metadata["text_content"] = text
-    print(f"📦 Văn bản cuối cùng lưu vào Qdrant:\n{text}\n{'='*50}")  # In văn bản trước khi lưu
+    print(f"📦 Văn bản cuối cùng lưu vào Qdrant:\n{text}\n{'='*50}")
     qdrant.upsert(
         collection_name=collection_name,
         points=[PointStruct(id=doc_id, vector=vector, payload=metadata)]
@@ -164,10 +161,9 @@ def extract_relevant_text(full_text, query, filename, context_size=300):
             
             # Tìm số trang gần nhất trước hoặc sau đoạn văn bản
             page_number = "Không rõ trang"
-            text_before = full_text[:end]  # Lấy toàn bộ văn bản từ đầu đến cuối đoạn trích xuất
+            text_before = full_text[:end]
             pages = [line for line in text_before.split("\n") if "[Trang " in line]
             if pages:
-                # Lấy số trang từ dòng cuối cùng có chứa "[Trang ...]"
                 last_page_line = pages[-1]
                 page_number = last_page_line.split("[Trang ")[-1].replace("]", "").strip()
             
@@ -215,13 +211,40 @@ def main():
             for result in results:
                 filename = result.payload.get("filename", "Không có tên tài liệu")
                 full_text = result.payload.get("text_content", "")
+                similarity_score = result.score
                 relevant_text, page_number = extract_relevant_text(full_text, query, filename)
                 
                 if relevant_text:
-                    st.markdown(f"📄 **Tài liệu:** {filename} - 📌 **Trang:** {page_number}")
+                    # Đường dẫn tới file PDF đã lưu
+                    pdf_path = f"uploads/{filename}"
+                    
+                    # Kiểm tra xem file có tồn tại không
+                    if os.path.exists(pdf_path):
+                        with open(pdf_path, "rb") as file:
+                            pdf_data = file.read()
+                        
+                        # Hiển thị tên file với nút tải xuống
+                        st.markdown(
+                            f"📄 **Tài liệu:** {filename} - 📌 **Trang:** {page_number} - "
+                            f"📊 **Điểm tương đồng:** {similarity_score:.4f}"
+                        )
+                        st.download_button(
+                            label="📥 Tải xuống tài liệu",
+                            data=pdf_data,
+                            file_name=filename,
+                            mime="application/pdf"
+                        )
+                    else:
+                        st.markdown(
+                            f"📄 **Tài liệu:** {filename} (File không khả dụng) - 📌 **Trang:** {page_number} - "
+                            f"📊 **Điểm tương đồng:** {similarity_score:.4f}"
+                        )
+                    
                     st.markdown(f"📌 **Nội dung trích xuất:**\n\n{relevant_text}")
                     refined_answer = process_with_gemini(query, filename, relevant_text)
                     st.markdown(f"🤖 **Trả lời:**\n\n{refined_answer}")
+        else:
+            st.warning("⚠️ Không tìm thấy tài liệu phù hợp.")
 
 if __name__ == "__main__":
-    main()  
+    main()
